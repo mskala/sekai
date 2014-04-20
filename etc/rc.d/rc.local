@@ -1,0 +1,14 @@
+#!/bin/sh
+#
+# /etc/rc.d/rc.local:  Local system initialization script.
+#
+# Put any local startup commands in here.  Also, if you have
+# anything that needs to be run at shutdown time you can
+# make an /etc/rc.d/rc.local_shutdown script and put those
+# commands in there.
+
+# SEKAI: set the Matrix Orbital LEDs to all green
+if [ -w /dev/ttyUSB0 ]; then
+  echo -ne '\xFE\x56\x01\xFE\x57\x02\xFE\x56\x03\xFE\x57\x04\xFE\x56\x05\xFE\x57\x06' > /dev/ttyUSB0
+  echo 'READY' > /dev/ttyUSB0
+fi
