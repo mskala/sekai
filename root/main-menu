@@ -1,0 +1,135 @@
+#!/usr/bin/perl
+
+#
+# MSK 001 Sekai Universal Host - simple top-level menu
+# Copyright (C) 2014  Matthew Skala
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, version 3.
+#
+# As a special exception, if you create a document which uses this font, and
+# embed this font or unaltered portions of this font into the document, this
+# font does not by itself cause the resulting document to be covered by the
+# GNU General Public License. This exception does not however invalidate any
+# other reasons why the document might be covered by the GNU General Public
+# License. If you modify this font, you may extend this exception to your
+# version of the font, but you are not obligated to do so. If you do not
+# wish to do so, delete this exception statement from your version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# Matthew Skala
+# http://ansuz.sooke.bc.ca/
+# mskala@ansuz.sooke.bc.ca
+#
+
+require "lk204.pl";
+
+&lk204_open;
+
+while (1) {
+  undef $/;
+  open(MOUNTS,'/proc/mounts');
+  $mounts=<MOUNTS>;
+  close(MOUNTS);
+  $/="\n";
+
+  if ($mounts=~m! / .*\brw\b!) {
+    $root_writable=1;
+    &lk204_led_red(1);
+  } else {
+    $root_writable=0;
+    &lk204_led_green(1);
+  }
+
+  &lk204_clear_screen;
+  &lk204_text("Main menu");
+
+  $_=&lk204_horiz_menu(2,'IP',$root_writable?'ro/':'rw/');
+  if ($_ eq 'IP') {
+    &set_ip_address;
+  } elsif ($_ eq 'ro/') {
+    &make_root_read_only;
+  } elsif ($_ eq 'rw/') {
+    &make_root_writable;
+  }
+}
+
+########################################################################
+
+sub make_root_read_only {
+  if ($mounts!~m!tmpfs /var tmpfs!m) {
+    `/sbin/mount -n -t tmpfs tmpfs /mnt/rwfs/var -o mode=0755`;
+    `/usr/bin/mkdir /mnt/rwfs/var/empty`;
+    `/sbin/mount --move /mnt/rwfs/var /var`;
+  }
+  if ($mounts!~m!tmpfs /etc tmpfs!m) {
+    `/sbin/mount -n -t tmpfs tmpfs /mnt/rwfs/etc -o mode=0755`;
+    `/usr/bin/cp -a /etc/* /mnt/rwfs/etc`;
+    `/sbin/mount --move /mnt/rwfs/etc /etc`;
+  }
+  `/bin/mount -n -o remount,ro /`;
+}
+
+sub make_root_writable {
+  `/bin/mount -n -o remount,rw /`;
+  if ($mounts=~m!tmpfs /var tmpfs!m) {
+    `/sbin/umount /var`;
+  }
+  if ($mounts=~m!tmpfs /etc tmpfs!m) {
+    `/sbin/umount /etc`;
+  }
+}
+
+########################################################################
+
+sub set_ip_address {
+  $psout=`ps -ax 2> /dev/null`;
+  $ifcout=`/sbin/ifconfig eth0`;
+  
+  if ($psout=~m!/sbin/dhcpcd!) {
+    $dhcpcd_running=1;
+  } else {
+    $dhcpcd_running=0;
+  }
+  if ($ifcout=~/\binet (\d+\.\d+\.\d+\.\d+) /) {
+    $ip=$1;
+  } else {
+    $ip='';
+  }
+
+  &lk204_clear_screen;
+  if ($dhcpcd_running) {
+    &lk204_text('dhcpcd is running');
+  } else {
+    &lk204_text('dhcpcd NOT running');
+  }
+
+  &lk204_set_cursor_pos(2,1);
+  if ($ip ne '') {
+    &lk204_text("IP: $ip");
+  } else {
+    &lk204_text('no IP active');
+  }
+
+  &lk204_set_cursor_pos(3,1);
+  &lk204_text('Choose config type');
+
+  $_=&lk204_horiz_menu(4,'DHCP','STATIC','EXIT');
+  if ($_ eq 'DHCP') {
+    `killall dhcpcd` if $dhcpcd_running;
+    `/sbin/dhcpcd &`;
+
+  } elsif ($_ eq 'STATIC') {
+    `killall dhcpcd` if $dhcpcd_running;
+    $new_ip=&lk204_edit_ip_address(4,$ip);
+    `/sbin/ifconfig eth0 $new_ip`;
+  }
+}

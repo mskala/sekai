@@ -87,6 +87,7 @@ sub lk204_clear_screen {
     print $lk204_out_fh "\e[12;8H#                      #";
     print $lk204_out_fh "\e[13;8H#                      #";
     print $lk204_out_fh "\e[14;8H########################";
+    print $lk204_out_fh "\e[10;10H";
   } else {
     print $lk204_out_fh "\xFE\x58";
   }
@@ -245,7 +246,7 @@ sub lk204_edit_ip_address {
   my($lineno,$ip)=@_;
   my(@digits);
 
-  my($a,$b,$c,$d)=split('.',$ip);
+  my($a,$b,$c,$d)=split(/\./,$ip);
 
   $a=0 if $a<0;
   $a=255 if $a>255;
@@ -270,7 +271,7 @@ sub lk204_edit_ip_address {
   $digits[15]=$d%10;
 
   &lk204_set_cursor_pos($lineno,1);
-  &lk204_text(sprintf('%3d.%3d.%3d.%3d   OK',$a,$b,$c,$d));
+  &lk204_text(sprintf('%3d.%3d.%3d.%3d   OK',$a+0,$b+0,$c+0,$d+0));
   
   my($xcol)=1;
   while (1) {
