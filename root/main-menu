@@ -239,10 +239,10 @@ sub midi_tune {
   $channel=1;
   $note[1]=69;
   $note[2]=69;
-  `amidi -p 20:0 -S '91 45 64'`;
-  `amidi -p 40:0 -S '91 45 64'`;
-  `amidi -p 20:0 -S '81 45 00'`;
-  `amidi -p 40:0 -S '81 45 00'`;
+  `amidi -p hw:1,0,0 -S '91 45 64'`;
+  `amidi -p hw:2,0,0 -S '91 45 64'`;
+  `amidi -p hw:1,0,0 -S '81 45 00'`;
+  `amidi -p hw:2,0,0 -S '81 45 00'`;
 
   while (1) {
     &lk204_set_cursor_pos(2+$channel,1);
@@ -257,11 +257,11 @@ sub midi_tune {
         440*2**(($note[$channel]-69)/12)));
       $notenum=sprintf('%02X',$note[$channel]);
       if ($channel==1) {
-        `amidi -p 20:0 -S '91 $notenum 64'`;
-        `amidi -p 20:0 -S '81 $notenum 00'`;
+        `amidi -p hw:1,0,0 -S '91 $notenum 64'`;
+        `amidi -p hw:1,0,0 -S '81 $notenum 00'`;
       } else {
-        `amidi -p 40:0 -S '91 $notenum 64'`;
-        `amidi -p 40:0 -S '81 $notenum 00'`;
+        `amidi -p hw:2,0,0 -S '91 $notenum 64'`;
+        `amidi -p hw:2,0,0 -S '81 $notenum 00'`;
       }
     }
 
@@ -272,21 +272,18 @@ sub midi_tune {
         $channel,$note[$channel],
         $note_cycle[$note[$channel]%12].int($note[$channel]/12),
         440*2**(($note[$channel]-69)/12)));
+      $notenum=sprintf('%02X',$note[$channel]);
       if ($channel==1) {
-        `amidi -p 20:0 -S '91 $notenum 64'`;
-        `amidi -p 20:0 -S '81 $notenum 00'`;
+        `amidi -p hw:1,0,0 -S '91 $notenum 64'`;
+        `amidi -p hw:1,0,0 -S '81 $notenum 00'`;
       } else {
-        `amidi -p 40:0 -S '91 $notenum 64'`;
-        `amidi -p 40:0 -S '81 $notenum 00'`;
+        `amidi -p hw:2,0,0 -S '91 $notenum 64'`;
+        `amidi -p hw:2,0,0 -S '81 $notenum 00'`;
       }
     }
     
-    if ($_ eq 'D') { # first channel
-      $channel=1;
-    }
-    
-    if ($_ eq 'C') { # second channel
-      $channel=2;
+    if (($_ eq 'D') or ($_ eq 'C')) { # other channel
+      $channel=3-$channel;
     }
     
     if ($_ eq 'E') { # exit
