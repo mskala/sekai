@@ -63,21 +63,21 @@ sub sys_menu {
     &lk204_clear_screen;
     &lk204_text("System menu");
 
-    if ($lk204_is_ansi) {
-      $_=&lk204_horiz_menu(2,'IP',$root_writable?'ro/':'rw/','main','X');
-    } else {
-      $_=&lk204_horiz_menu(2,'IP',$root_writable?'ro/':'rw/','main');
-    }
+    $_=&lk204_horiz_submenu(2,'IP',$root_writable?'ro/':'rw/','reload');
     if ($_ eq 'IP') {
       &set_ip_address;
     } elsif ($_ eq 'ro/') {
       &make_root_read_only;
     } elsif ($_ eq 'rw/') {
       &make_root_writable;
-    } elsif ($_ eq 'X') {
+    } elsif ($_ eq 'reload') {
       &lk204_close;
-      exit;
-    } elsif ($_ eq 'main') {
+      if ($lk204_is_ansi) {
+        exit;
+      } else {
+        exec './main-menu';
+      }
+    } elsif ($_ eq '[ESC]') {
       return;
     }
   }
@@ -93,14 +93,14 @@ sub midi_menu {
     &lk204_clear_screen;
     &lk204_text("MIDI menu");
 
-    $_=&lk204_horiz_menu(2,'conn','disco','tune','main');
+    $_=&lk204_horiz_submenu(2,'conn','disco','tune');
     if ($_ eq 'conn') {
       &midi_conn;
     } elsif ($_ eq 'disco') {
       &midi_disco;
     } elsif ($_ eq 'tune') {
       &midi_tune;
-    } elsif ($_ eq 'main') {
+    } elsif ($_ eq '[ESC]') {
       return;
     }
   }
@@ -197,7 +197,7 @@ sub set_ip_address {
   &lk204_set_cursor_pos(3,1);
   &lk204_text('Choose config type');
 
-  $_=&lk204_horiz_menu(4,'DHCP','STATIC','EXIT');
+  $_=&lk204_horiz_submenu(4,'DHCP','STATIC','EXIT');
   if ($_ eq 'DHCP') {
     `killall dhcpcd` if $dhcpcd_running;
     `/sbin/dhcpcd &`;
@@ -212,13 +212,51 @@ sub set_ip_address {
 ########################################################################
 
 sub midi_conn {
-  &not_implemented;
+  @inputs=();
+  open(ACONN,'aconnect -i -l|');
+  while (<ACONN>) {
+    $clientno=$1 if (/^client (\d+):/);
+    if (($clientno>0) && (/^    0 '(.*)'/)) {
+      $_="$clientno:$1";
+      s/ +$//;
+      push @inputs,substr($_,0,20);
+    }
+  }
+  close(ACONN);
+  
+  $_=&lk204_vert_menu('Choose MIDI input',@inputs);
+  if (/^(\d+):/) {
+    $inport=$1;
+  } else {
+    return;
+  }
+
+  @outputs=();
+  open(ACONN,'aconnect -o -l|');
+  while (<ACONN>) {
+    $clientno=$1 if (/^client (\d+):/);
+    if (($clientno>0) && (/^    0 '(.*)'/)) {
+      $_="$clientno:$1";
+      s/ +$//;
+      push @outputs,substr($_,0,20);
+    }
+  }
+  close(ACONN);
+  
+  $_=&lk204_vert_menu('Choose MIDI output',@outputs);
+  if (/^(\d+):/) {
+    $outport=$1;
+  } else {
+    return;
+  }
+  
+  `aconnect $inport $outport`;
 }
 
 sub midi_disco {
   &lk204_set_cursor_pos(3,1);
   &lk204_text('disconnect all MIDI?');
-  if (&lk204_horiz_menu(4,'YES','NO') eq 'YES') {
+  if (&lk204_horiz_submenu(4,'YES','NO') eq 'YES') {
     `aconnect -x`;
   }
 }
@@ -229,12 +267,12 @@ sub midi_tune {
   &lk204_clear_screen;
   &lk204_text('MIDI tuner');
   &lk204_set_cursor_pos(2,1);
-  &lk204_text('LR channel, UD pitch');
+  &lk204_text('UD channel, LR pitch');
   
   &lk204_set_cursor_pos(3,1);
-  &lk204_text('1  69 A5    440.00Hz');
+  &lk204_text('1  69 A4    440.00Hz');
   &lk204_set_cursor_pos(4,1);
-  &lk204_text('2  69 A5    440.00Hz');
+  &lk204_text('2  69 A4    440.00Hz');
   
   $channel=1;
   $note[1]=69;
@@ -248,29 +286,20 @@ sub midi_tune {
     &lk204_set_cursor_pos(2+$channel,1);
     $_=&lk204_get_key;
 
-    if ($_ eq 'B') { # up
+    if ($_ eq 'C') { # right
       $note[$channel]++;
       $note[$channel]=127 if $note[$channel]>127;
-      &lk204_text(sprintf('%d %3d %-4s %7.2fHz',
-        $channel,$note[$channel],
-        $note_cycle[$note[$channel]%12].int($note[$channel]/12),
-        440*2**(($note[$channel]-69)/12)));
-      $notenum=sprintf('%02X',$note[$channel]);
-      if ($channel==1) {
-        `amidi -p hw:1,0,0 -S '91 $notenum 64'`;
-        `amidi -p hw:1,0,0 -S '81 $notenum 00'`;
-      } else {
-        `amidi -p hw:2,0,0 -S '91 $notenum 64'`;
-        `amidi -p hw:2,0,0 -S '81 $notenum 00'`;
-      }
     }
 
-    if ($_ eq 'H') { # down
+    if ($_ eq 'D') { # left
       $note[$channel]--;
       $note[$channel]=0 if $note[$channel]<0;
-      &lk204_text(sprintf('%d %3d %-4s %7.2fHz',
+    }
+    
+    if (($_ eq 'C') || ($_ eq 'D')) {
+      &lk204_text(sprintf('%d %3d %-4s%8.2fHz',
         $channel,$note[$channel],
-        $note_cycle[$note[$channel]%12].int($note[$channel]/12),
+        $note_cycle[$note[$channel]%12].(int($note[$channel]/12)-1),
         440*2**(($note[$channel]-69)/12)));
       $notenum=sprintf('%02X',$note[$channel]);
       if ($channel==1) {
@@ -282,11 +311,11 @@ sub midi_tune {
       }
     }
     
-    if (($_ eq 'D') or ($_ eq 'C')) { # other channel
+    if (($_ eq 'B') or ($_ eq 'H')) { # other channel
       $channel=3-$channel;
     }
     
-    if ($_ eq 'E') { # exit
+    if (($_ eq 'A') || ($_ eq 'E')) { # exit
       return;
     }
   }

@@ -230,16 +230,110 @@ sub lk204_horiz_menu {
     if ($_ eq 'E') {
       return $_[$i];
     }
-    if ($_ eq 'D') {
+    if (($_ eq 'B') || ($_ eq 'D')) {
       $i--;
       $i=$#_ if $i<0;
     }
-    if ($_ eq 'C') {
+    if (($_ eq 'C') || ($_ eq 'H')) {
       $i++;
       $i=0 if $i>$#_;
     }
   }
 }
+
+sub lk204_horiz_submenu {
+  my($lineno)=shift;
+  my(@col,$xcol);
+
+  for ($i=0,$xcol=1;$i<$#_;$i++) {
+    $col[$i]=$xcol;
+    $xcol+=(length($_[$i])+1);
+  }
+  push @col,21-length($_[$#_]);
+  
+  &lk204_set_cursor_pos($lineno,1);
+  for ($i=0,$xcol=1;$i<=$#_;$i++) {
+    &lk204_text((' 'x($col[$i]-$xcol)).$_[$i]);
+    $xcol=$col[$i]+length($_[$i]);
+  }
+  
+  $i=0;
+  while (1) {
+    &lk204_set_cursor_pos($lineno,$col[$i]);
+    $_=&lk204_get_key;
+    if ($_ eq 'E') {
+      return $_[$i];
+    }
+    if ($_ eq 'A') {
+      return '[ESC]';
+    }
+    if (($_ eq 'B') || ($_ eq 'D')) {
+      $i--;
+      $i=$#_ if $i<0;
+    }
+    if (($_ eq 'C') || ($_ eq 'H')) {
+      $i++;
+      $i=0 if $i>$#_;
+    }
+  }
+}
+
+sub lk204_vert_menu {
+  my($prompt)=shift;
+  my($scroll)=-1;
+  
+  &lk204_clear_screen;
+  &lk204_text($prompt);
+  for ($i=0;$i<=$#_;$i++) {
+    &lk204_set_cursor_pos($i+2,1);
+    &lk204_text($_[$i]);
+    last if $i>=2;
+  }
+  
+  $i=0;
+  while (1) {
+    &lk204_set_cursor_pos($i-$scroll+1,1);
+    $_=&lk204_get_key;
+
+    if ($_ eq 'E') {
+      return $_[$i];
+    }
+    if ($_ eq 'A') {
+      return '[ESC]';
+    }
+
+    if (($_ eq 'B') || ($_ eq 'D')) {
+      $i--;
+      $i=$#_ if $i<0;
+    }
+    if (($_ eq 'C') || ($_ eq 'H')) {
+      $i++;
+      $i=0 if $i>$#_;
+    }
+
+    if ($i-$scroll<0) {
+      $scroll=$i;
+      &lk204_clear_screen;
+      for ($j=$scroll;$j<=$#_;$j++) {
+        &lk204_set_cursor_pos($j-$scroll+1,1);
+        &lk204_text($_[$j]);
+        last if $j-$scroll>=3;
+      }
+    }
+
+    if ($i-$scroll>3) {
+      $scroll=$i-3;
+      &lk204_clear_screen;
+      for ($j=$scroll;$j<=$#_;$j++) {
+        &lk204_set_cursor_pos($j-$scroll+1,1);
+        &lk204_text($_[$j]);
+        last if $j-$scroll>=3;
+      }
+    }
+  }
+}
+
+########################################################################
 
 sub lk204_edit_ip_address {
   my($lineno,$ip)=@_;
