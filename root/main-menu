@@ -35,54 +35,129 @@ require "lk204.pl";
 &lk204_open;
 
 while (1) {
+  &update_mount_status;
+  &lk204_clear_screen;
+  &lk204_text("Main menu");
+
+  $_=&lk204_horiz_menu(2,'sys','USB','MIDI','audio');
+  if ($_ eq 'sys') {
+    &sys_menu;
+  } elsif ($_ eq 'USB') {
+    &usb_menu;
+  } elsif ($_ eq 'MIDI') {
+    &midi_menu;
+  } elsif ($_ eq 'audio') {
+    &audio_menu;
+  }
+}
+
+sub not_implemented {
+  &lk204_set_cursor_pos(3,1);
+  &lk204_text('not implemented');
+  &lk204_horiz_menu(4,':-(');
+}
+
+sub sys_menu {
+  while (1) {
+    &update_mount_status;
+    &lk204_clear_screen;
+    &lk204_text("System menu");
+
+    if ($lk204_is_ansi) {
+      $_=&lk204_horiz_menu(2,'IP',$root_writable?'ro/':'rw/','main','X');
+    } else {
+      $_=&lk204_horiz_menu(2,'IP',$root_writable?'ro/':'rw/','main');
+    }
+    if ($_ eq 'IP') {
+      &set_ip_address;
+    } elsif ($_ eq 'ro/') {
+      &make_root_read_only;
+    } elsif ($_ eq 'rw/') {
+      &make_root_writable;
+    } elsif ($_ eq 'X') {
+      &lk204_close;
+      exit;
+    } elsif ($_ eq 'main') {
+      return;
+    }
+  }
+}
+
+sub usb_menu {
+  &not_implemented;
+}
+
+sub midi_menu {
+  while (1) {
+    &update_mount_status;
+    &lk204_clear_screen;
+    &lk204_text("MIDI menu");
+
+    $_=&lk204_horiz_menu(2,'conn','disco','tune','main');
+    if ($_ eq 'conn') {
+      &midi_conn;
+    } elsif ($_ eq 'disco') {
+      &midi_disco;
+    } elsif ($_ eq 'tune') {
+      &midi_tune;
+    } elsif ($_ eq 'main') {
+      return;
+    }
+  }
+}
+
+sub audio_menu {
+  &not_implemented;
+}
+
+########################################################################
+
+sub update_mount_status {
+  open(RS,'/etc/msk001-root-status');
+  $root_status=<RS>;
+  chomp $root_status;
+  close(RS);
+
   undef $/;
   open(MOUNTS,'/proc/mounts');
   $mounts=<MOUNTS>;
   close(MOUNTS);
   $/="\n";
 
-  if ($mounts=~m! / .*\brw\b!) {
-    $root_writable=1;
+  if ($root_status eq '') {
+    if ($mounts=~m! / .*\brw\b!) {
+      $root_writable=1;
+      &lk204_led_red(1);
+    } else {
+      $root_writable=0;
+      &lk204_led_green(1);
+    }
+  } else {
+    $root_writable=($root_status eq 'read-write')?1:0;
+  }
+
+  if ($root_writable) {
     &lk204_led_red(1);
   } else {
-    $root_writable=0;
     &lk204_led_green(1);
   }
 
-  &lk204_clear_screen;
-  &lk204_text("Main menu");
-
-  $_=&lk204_horiz_menu(2,'IP',$root_writable?'ro/':'rw/');
-  if ($_ eq 'IP') {
-    &set_ip_address;
-  } elsif ($_ eq 'ro/') {
-    &make_root_read_only;
-  } elsif ($_ eq 'rw/') {
-    &make_root_writable;
-  }
 }
 
 ########################################################################
 
 sub make_root_read_only {
-  if ($mounts!~m!tmpfs /var tmpfs!m) {
-    `/sbin/mount -n -t tmpfs tmpfs /mnt/rwfs/var -o mode=0755`;
-    `/usr/bin/mkdir /mnt/rwfs/var/empty`;
-    `/sbin/mount --move /mnt/rwfs/var /var`;
-  }
   if ($mounts!~m!tmpfs /etc tmpfs!m) {
     `/sbin/mount -n -t tmpfs tmpfs /mnt/rwfs/etc -o mode=0755`;
     `/usr/bin/cp -a /etc/* /mnt/rwfs/etc`;
     `/sbin/mount --move /mnt/rwfs/etc /etc`;
+    `echo 'read-only' > /etc/msk001-root-status`;
   }
-  `/bin/mount -n -o remount,ro /`;
+  `sync ; /bin/mount -n -o remount,ro /`;
 }
 
 sub make_root_writable {
   `/bin/mount -n -o remount,rw /`;
-  if ($mounts=~m!tmpfs /var tmpfs!m) {
-    `/sbin/umount /var`;
-  }
   if ($mounts=~m!tmpfs /etc tmpfs!m) {
     `/sbin/umount /etc`;
   }
@@ -131,5 +206,91 @@ sub set_ip_address {
     `killall dhcpcd` if $dhcpcd_running;
     $new_ip=&lk204_edit_ip_address(4,$ip);
     `/sbin/ifconfig eth0 $new_ip`;
+  }
+}
+
+########################################################################
+
+sub midi_conn {
+  &not_implemented;
+}
+
+sub midi_disco {
+  &lk204_set_cursor_pos(3,1);
+  &lk204_text('disconnect all MIDI?');
+  if (&lk204_horiz_menu(4,'YES','NO') eq 'YES') {
+    `aconnect -x`;
+  }
+}
+
+sub midi_tune {
+  @note_cycle=qw/C C# D D# E F F# G G# A A# B/;
+
+  &lk204_clear_screen;
+  &lk204_text('MIDI tuner');
+  &lk204_set_cursor_pos(2,1);
+  &lk204_text('LR channel, UD pitch');
+  
+  &lk204_set_cursor_pos(3,1);
+  &lk204_text('1  69 A5    440.00Hz');
+  &lk204_set_cursor_pos(4,1);
+  &lk204_text('2  69 A5    440.00Hz');
+  
+  $channel=1;
+  $note[1]=69;
+  $note[2]=69;
+  `amidi -p 20:0 -S '91 45 64'`;
+  `amidi -p 40:0 -S '91 45 64'`;
+  `amidi -p 20:0 -S '81 45 00'`;
+  `amidi -p 40:0 -S '81 45 00'`;
+
+  while (1) {
+    &lk204_set_cursor_pos(2+$channel,1);
+    $_=&lk204_get_key;
+
+    if ($_ eq 'B') { # up
+      $note[$channel]++;
+      $note[$channel]=127 if $note[$channel]>127;
+      &lk204_text(sprintf('%d %3d %-4s %7.2fHz',
+        $channel,$note[$channel],
+        $note_cycle[$note[$channel]%12].int($note[$channel]/12),
+        440*2**(($note[$channel]-69)/12)));
+      $notenum=sprintf('%02X',$note[$channel]);
+      if ($channel==1) {
+        `amidi -p 20:0 -S '91 $notenum 64'`;
+        `amidi -p 20:0 -S '81 $notenum 00'`;
+      } else {
+        `amidi -p 40:0 -S '91 $notenum 64'`;
+        `amidi -p 40:0 -S '81 $notenum 00'`;
+      }
+    }
+
+    if ($_ eq 'H') { # down
+      $note[$channel]--;
+      $note[$channel]=0 if $note[$channel]<0;
+      &lk204_text(sprintf('%d %3d %-4s %7.2fHz',
+        $channel,$note[$channel],
+        $note_cycle[$note[$channel]%12].int($note[$channel]/12),
+        440*2**(($note[$channel]-69)/12)));
+      if ($channel==1) {
+        `amidi -p 20:0 -S '91 $notenum 64'`;
+        `amidi -p 20:0 -S '81 $notenum 00'`;
+      } else {
+        `amidi -p 40:0 -S '91 $notenum 64'`;
+        `amidi -p 40:0 -S '81 $notenum 00'`;
+      }
+    }
+    
+    if ($_ eq 'D') { # first channel
+      $channel=1;
+    }
+    
+    if ($_ eq 'C') { # second channel
+      $channel=2;
+    }
+    
+    if ($_ eq 'E') { # exit
+      return;
+    }
   }
 }

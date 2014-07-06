@@ -281,6 +281,7 @@ if [ ! $READWRITE = yes ]; then
   /sbin/mount -n -t tmpfs tmpfs /mnt/rwfs/var -o mode=0755
   /sbin/mount -n -t tmpfs tmpfs /mnt/rwfs/etc -o mode=0755
   /usr/bin/cp -a /etc/* /mnt/rwfs/etc
+  echo 'read-only' > /mnt/rwfs/etc/msk001-root-status
   /usr/bin/mkdir /mnt/rwfs/var/empty
   /sbin/mount --move /mnt/rwfs/var /var
   /sbin/mount --move /mnt/rwfs/etc /etc

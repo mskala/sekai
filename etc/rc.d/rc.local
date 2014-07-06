@@ -12,3 +12,6 @@ if [ -w /dev/ttyUSB0 ]; then
   echo -ne '\xFE\x56\x01\xFE\x57\x02\xFE\x56\x03\xFE\x57\x04\xFE\x56\x05\xFE\x57\x06' > /dev/ttyUSB0
   echo 'READY' > /dev/ttyUSB0
 fi
+
+# SEKAI: start the main menu
+cd /root ; /root/main-menu &

@@ -28,13 +28,11 @@
 # mskala@ansuz.sooke.bc.ca
 #
 
-use utf8;
-
 ########################################################################
 
 sub lk204_open {
   if ((`uname -m`=~/x86/) || ($ARGV[1]=~/-t/)) {
-    `/usr/bin/stty -echo cbreak`;
+    `/usr/bin/stty raw -echo cbreak`;
     open($lk204_out_fh,'>-');
     open($lk204_in_fh,'<-');
     $lk204_is_ansi=1;
@@ -48,7 +46,7 @@ sub lk204_open {
     print $lk204_out_fh "\e[14;8H########################";
     print $lk204_out_fh "\e[10;10H";
   } else {
-    `/usr/bin/stty -echo cbreak </dev/ttyUSB0`;
+    `/usr/bin/stty raw -echo cbreak < /dev/ttyUSB0`;
     open($lk204_out_fh,'>/dev/ttyUSB0');
     open($lk204_in_fh,'</dev/ttyUSB0');
     $lk204_is_ansi=0;
@@ -105,7 +103,7 @@ sub lk204_set_cursor_pos {
   if ($lk204_is_ansi) {
     printf $lk204_out_fh "\e[%d;%dH",9+$row,9+$col;
   } else {
-    printf $lk204_out_fh "\xFE%c%c",$col,$row;
+    printf $lk204_out_fh "\xFE\x47%c%c",$col,$row;
   }
   flush $lk204_out_fh;
 }
@@ -132,6 +130,7 @@ sub lk204_get_key {
     }
     return $_ if /^[A-EGH]$/;
     return 'E' if ($_ eq "\n") && $lk204_is_ansi;
+    return 'E' if ($_ eq "\r") && $lk204_is_ansi;
     next unless $lk204_is_ansi && ($_ eq "\e");
     read($lk204_in_fh,$_,1);
     next unless $_ eq '[';
