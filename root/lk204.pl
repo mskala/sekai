@@ -6,15 +6,6 @@
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, version 3.
 #
-# As a special exception, if you create a document which uses this font, and
-# embed this font or unaltered portions of this font into the document, this
-# font does not by itself cause the resulting document to be covered by the
-# GNU General Public License. This exception does not however invalidate any
-# other reasons why the document might be covered by the GNU General Public
-# License. If you modify this font, you may extend this exception to your
-# version of the font, but you are not obligated to do so. If you do not
-# wish to do so, delete this exception statement from your version.
-#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -31,7 +22,7 @@
 ########################################################################
 
 sub lk204_open {
-  if ((`uname -m`=~/x86/) || ($ARGV[1]=~/-t/)) {
+  if ((`uname -m`=~/[x46]86/) || ($ARGV[1]=~/-t/)) {
     `/usr/bin/stty raw -echo cbreak`;
     open($lk204_out_fh,'>-');
     open($lk204_in_fh,'<-');
@@ -222,7 +213,7 @@ sub lk204_horiz_menu {
     &lk204_text((' 'x($col[$i]-$xcol)).$_[$i]);
     $xcol=$col[$i]+length($_[$i]);
   }
-  
+
   $i=0;
   while (1) {
     &lk204_set_cursor_pos($lineno,$col[$i]);
@@ -328,6 +319,95 @@ sub lk204_vert_menu {
         &lk204_set_cursor_pos($j-$scroll+1,1);
         &lk204_text($_[$j]);
         last if $j-$scroll>=3;
+      }
+    }
+  }
+}
+
+sub lk204_grid_submenu {
+  my($startline)=shift;
+  my(@col,$numcols,@row);
+  my($sel,$special_sel);
+  my($i,$j,$k);
+  my(@cwidth);
+
+  # find the maximum number of columns we can fit
+  for ($numcols=$#_+1;$numcols>0;$numcols--) {
+    for ($i=0;$i<$numcols;$i++) { $cwidth[$i]=0; }
+    for ($i=0;$i<=$#_;$i++) {
+      $cwidth[$i%$numcols]=length($_[$i])
+        if length($_[$i])>$cwidth[$i%$numcols];
+    }
+    $j=0;
+    for ($i=0;$i<$numcols;$i++,$j++) { $j+=$cwidth[$i]; }
+    $j--;
+    last if $j<=20;
+  }
+  # NOTE big trouble if the loop terminates at $numcols=0
+
+  # compute the layout we have chosen, which just had better fit
+  # also display it
+  for ($i=0;$i<=$#_;$i++) {
+    $row[$i]=$startline+int($i/$numcols);
+    if ($i%$numcols==0) {
+      $col[$i]=1;
+      &lk204_set_cursor_pos($row[$i],1);
+      &lk204_text(substr($_[$i].(' 'x20),0,20));
+    } else {
+      $col[$i]=$col[$i-1]+$cwidth[($i-1)%$numcols]+1;
+      &lk204_set_cursor_pos($row[$i],$col[$i]);
+      &lk204_text($_[$i]);
+    }
+  }
+
+  $sel=0;
+  $special_sel=int($#_/$numcols)*$numcols;
+  while (1) {
+    &lk204_set_cursor_pos($row[$sel],$col[$sel]);
+    $_=&lk204_get_key;
+
+    if ($_ eq 'E') { # enter
+      return $_[$sel];
+    }
+
+    if ($_ eq 'A') { # up-left/escape
+      return '[ESC]';
+    }
+
+    if ($_ eq 'D') { # left
+      $sel--;
+      if ($sel<0) {
+        $sel=$numcols-1;
+      } elsif (($sel+1)%$numcols==0) {
+        $sel+=$numcols;
+      }
+      $sel=$#_ if $sel>$#_;
+    }
+
+    if ($_ eq 'C') { # right
+      $sel++;
+      if ($sel>$#_) {
+        $sel=$special_sel;
+      } elsif ($sel%$numcols==0) {
+        $sel-=$numcols;
+      }
+    }
+
+    if ($_ eq 'B') { # up
+      if ($sel>=$numcols) {
+        $sel-=$numcols;
+      } else {
+        $sel+=$special_sel;
+        $sel-=$numcols if $sel>$#_;
+      }
+    }
+
+    if ($_ eq 'H') { # down
+      if ($sel>=$special_sel) {
+        $sel-=$special_sel;
+      } else {
+        $sel+=$numcols;
+        $sel-=$special_sel if $sel>$#_;
       }
     }
   }

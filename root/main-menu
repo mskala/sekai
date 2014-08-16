@@ -8,15 +8,6 @@
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, version 3.
 #
-# As a special exception, if you create a document which uses this font, and
-# embed this font or unaltered portions of this font into the document, this
-# font does not by itself cause the resulting document to be covered by the
-# GNU General Public License. This exception does not however invalidate any
-# other reasons why the document might be covered by the GNU General Public
-# License. If you modify this font, you may extend this exception to your
-# version of the font, but you are not obligated to do so. If you do not
-# wish to do so, delete this exception statement from your version.
-#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -39,11 +30,13 @@ while (1) {
   &lk204_clear_screen;
   &lk204_text("Main menu");
 
-  $_=&lk204_horiz_menu(2,'sys','USB','MIDI','audio');
+  $_=&lk204_grid_submenu(2,'sys','USB','files','MIDI','audio');
   if ($_ eq 'sys') {
     &sys_menu;
   } elsif ($_ eq 'USB') {
     &usb_menu;
+  } elsif ($_ eq 'files') {
+    &not_implemented;
   } elsif ($_ eq 'MIDI') {
     &midi_menu;
   } elsif ($_ eq 'audio') {
@@ -84,7 +77,22 @@ sub sys_menu {
 }
 
 sub usb_menu {
-  &not_implemented;
+  while (1) {
+    &update_mount_status;
+    &lk204_clear_screen;
+    &lk204_text("USB menu");
+
+    $_=&lk204_horiz_submenu(2,'mnt','unmnt1','unmnt*');
+    if ($_ eq 'mnt') {
+      &not_implemented;
+    } elsif ($_ eq 'unmnt1') {
+      &not_implemented;
+    } elsif ($_ eq 'unmnt*') {
+      &not_implemented;
+    } elsif ($_ eq '[ESC]') {
+      return;
+    }
+  }
 }
 
 sub midi_menu {
@@ -93,11 +101,13 @@ sub midi_menu {
     &lk204_clear_screen;
     &lk204_text("MIDI menu");
 
-    $_=&lk204_horiz_submenu(2,'conn','disco','tune');
+    $_=&lk204_grid_submenu(2,'conn','disco','progch','tune');
     if ($_ eq 'conn') {
       &midi_conn;
     } elsif ($_ eq 'disco') {
       &midi_disco;
+    } elsif ($_ eq 'progch') {
+      &midi_progch;
     } elsif ($_ eq 'tune') {
       &midi_tune;
     } elsif ($_ eq '[ESC]') {
@@ -113,35 +123,76 @@ sub audio_menu {
 ########################################################################
 
 sub update_mount_status {
+  # check for saved root status
+  # this is needed because the ODROID's kernel lies in /proc/mounts,
+  # often reporting root as rw when it isn't, and we need to know 4 reals
   open(RS,'/etc/msk001-root-status');
   $root_status=<RS>;
   chomp $root_status;
   close(RS);
 
+  # also check what the kernel claims, as a fallback
   undef $/;
   open(MOUNTS,'/proc/mounts');
   $mounts=<MOUNTS>;
   close(MOUNTS);
   $/="\n";
 
+  # decide what we will believe
   if ($root_status eq '') {
     if ($mounts=~m! / .*\brw\b!) {
       $root_writable=1;
-      &lk204_led_red(1);
     } else {
       $root_writable=0;
-      &lk204_led_green(1);
     }
   } else {
     $root_writable=($root_status eq 'read-write')?1:0;
   }
 
+  # report it on the top LED
   if ($root_writable) {
     &lk204_led_red(1);
   } else {
     &lk204_led_green(1);
   }
 
+  # also skim the /proc/mounts and /proc/mdstat to figure out what SCSI
+  # or SCSIesque devices we will believe are hard disks
+  %hard_disks=();  
+  while ($mounts=~m!^(/dev/sd[a-z])\d* (/\S+)!mg) {
+    next if substr($2,0,4) eq '/mnt';
+    $hard_disks{$1}=1;
+  }
+  open(MDSTAT,'/proc/mdstat');
+  while (<MDSTAT>) {
+    next unless /^md\d+ : /;
+    while (/\b(sd?\d*)\[/g) {
+      $hard_disks{"/dev/$1"}=1;
+    }
+  }
+  close(MDSTAT);
+
+  %usb_exists=();
+  %usb_mounted=();
+  while ($mounts=~m!^(/dev/sd[a-z])(\d*) (/\S+)!mg) {
+    next if $hard_disks{$1};
+    $usb_exists{$1.$2}=1;
+    $usb_mounted{$1.$2}=1;
+  }
+  $_=`/sbin/blkid`;
+  while (m!^(/dev/sd[a-z])(\d*):!mg) {
+    next if $hard_disks{$1};
+    $usb_exists{$1.$2}=1;
+  }
+
+  # report USB status on middle LED
+  if (!(%usb_exists)) {
+    &lk204_led_green(2);
+  } elsif (%usb_mounted) {
+    &lk204_led_red(2);
+  } else {
+    &lk204_led_yellow(2);
+  }  
 }
 
 ########################################################################
@@ -197,12 +248,12 @@ sub set_ip_address {
   &lk204_set_cursor_pos(3,1);
   &lk204_text('Choose config type');
 
-  $_=&lk204_horiz_submenu(4,'DHCP','STATIC','EXIT');
+  $_=&lk204_horiz_submenu(4,'DHCP','static','cancel');
   if ($_ eq 'DHCP') {
     `killall dhcpcd` if $dhcpcd_running;
     `/sbin/dhcpcd &`;
 
-  } elsif ($_ eq 'STATIC') {
+  } elsif ($_ eq 'static') {
     `killall dhcpcd` if $dhcpcd_running;
     $new_ip=&lk204_edit_ip_address(4,$ip);
     `/sbin/ifconfig eth0 $new_ip`;
@@ -242,7 +293,7 @@ sub midi_conn {
     }
   }
   close(ACONN);
-  
+
   $_=&lk204_vert_menu('Choose MIDI output',@outputs);
   if (/^(\d+):/) {
     $outport=$1;
@@ -260,6 +311,299 @@ sub midi_disco {
     `aconnect -x`;
   }
 }
+
+########################################################################
+
+sub midi_progch {
+  @program_names=split(/\n/,<<EOF);
+1 Acoustic Grand
+2 Bright Acoustic
+3 Electric Grand
+4 Honky-Tonk Piano
+5 Electric Piano 1
+6 Electric Piano 2
+7 Harpsichord
+8 Clavinet
+9 Celesta
+10 Glockenspiel
+11 Music Box
+12 Vibraphone
+13 Marimba
+14 Xylophone
+15 Tubular Bells
+16 Dulcimer
+17 Drawbar Organ
+18 Percussive Organ
+19 Rock Organ
+20 Church Organ
+21 Reed Organ
+22 Accordian
+23 Harmonica
+24 Tango Accordian
+25 Nylon String Gtr
+26 Steel String Gtr
+27 Electric Jazz Gtr
+28 Electr. Clean Gtr
+29 Electr. Muted Gtr
+30 Overdriven Guitar
+31 Distortion Guitar
+32 Guitar Harmonics
+33 Acoustic Bass
+34 Elec. Bass finger
+35 Elec. Bass pick
+36 Fretless Bass
+37 Slap Bass 1
+38 Slap Bass 2
+39 Synth Bass 1
+40 Synth Bass 2
+41 Violin
+42 Viola
+43 Cello
+44 Contrabass
+45 Tremolo Strings
+46 Pizzicato Strings
+47 Orchest. Strings
+48 Timpani
+49 String Ensemble 1
+50 String Ensemble 2
+51 Synth Strings 1
+52 Synth Strings 2
+53 Choir Aahs
+54 Voice Oohs
+55 Synth Voice
+56 Orchestra Hit
+57 Trumpet
+58 Trombone
+59 Tuba
+60 Muted Trumpet
+61 French Horn
+62 Brass Section
+63 Synth Brass 1
+64 Synth Brass 2
+65 Soprano Sax
+66 Alto Sax
+67 Tenor Sax
+68 Baritone Sax
+69 Oboe
+70 English Horn
+71 Bassoon
+72 Clarinet
+73 Piccolo
+74 Flute
+75 Recorder
+76 Pan Flute
+77 Blown Bottle
+78 Shakuhachi
+79 Whistle
+80 Ocarina
+81 Lead 1 square
+82 Lead 2 sawtooth
+83 Lead 3 calliope
+84 Lead 4 chiff
+85 Lead 5 charang
+86 Lead 6 voice
+87 Lead 7 fifths
+88 Lead 8 bass+lead
+89 Pad 1 new age
+90 Pad 2 warm
+91 Pad 3 polysynth
+92 Pad 4 choir
+93 Pad 5 bowed
+94 Pad 6 metallic
+95 Pad 7 halo
+96 Pad 8 sweep
+97 FX1 rain
+98 FX2 soundtrack
+99 FX3 crystal
+100 FX4 atmosphere
+101 FX5 brightness
+102 FX6 goblins
+103 FX7 echoes
+104 FX8 sci-fi
+105 Sitar
+106 Banjo
+107 Shamisen
+108 Koto
+109 Kalimba
+110 Bagpipe
+111 Fiddle
+112 Shanai
+113 Tinkle Bell
+114 Agogo
+115 Steel Drums
+116 Woodblock
+117 Taiko Drum
+118 Melodic Tom
+119 Synth Drum
+120 Reverse Cymbal
+121 Gtr Fret Noise
+122 Breath Noise
+123 Seashore
+124 Bird Tweet
+125 Telephone Ring
+126 Helicopter
+127 Applause
+128 Gunshot
+EOF
+  @program_sets=split(/\n/,<<EOF);
+PIANO
+CHROM PERCUS
+ORGAN
+GUITAR
+BASS
+STRINGS
+ENSEMBLE
+BRASS
+REED
+PIPE
+SYNTH LEAD
+SYNTH PAD
+SYNTH FX
+ETHNIC
+PERCUSSIVE
+SOUND FX
+EOF
+
+  $last_refreshed_connections=0;
+  my($channel)=1;
+  my($program)=0;
+  my($outno)=-1;
+  my($y,$i)=(0,0);
+  my($x10)=0;
+
+  &lk204_clear_screen;
+  &lk204_text('MIDI program');
+  
+  &lk204_set_cursor_pos(3,1);
+  &lk204_text('Chn 1          PIANO');
+  &lk204_set_cursor_pos(4,1);
+  &lk204_text($program_names[0]);
+
+
+
+  while (1) {
+    if ($last_refreshed_connections<(time-10)) {
+      $outno=$output_numbers[$outno] if $outno>=0;
+
+      @outputs=();
+      @output_numbers=();
+      open(ACONN,'aconnect -o -l|');
+      while (<ACONN>) {
+        $clientno=$1 if (/^client (\d+):/);
+        if (($clientno>0) && (/^    0 '(.*)'/)) {
+          $_="$clientno:$1";
+          s/ +$//;
+          push @outputs,substr($_,0,20);
+          push @output_numbers,$clientno;
+        }
+      }
+      close(ACONN);
+      
+      if ($outno<0) {
+        $outno=0;
+      } else {
+        for ($i=0;$i<=$#output_numbers;$i++) {
+          if ($outno==$output_numbers[$i]) {
+            $outno=$i;
+            last;
+          }
+        }
+      }
+
+      &lk204_set_cursor_pos(2,1);
+      &lk204_text(substr($outputs[$outno].(' 'x20),0,20));
+      $last_refreshed_connections=time+0;
+    }
+
+    &lk204_set_cursor_pos(2+$y,1);
+    $_=&lk204_get_key;
+
+    if ($_ eq 'C') { # right
+      if ($y==0) {
+        $outno++;
+        $outno=0 if $outno>$#outputs;
+        &lk204_set_cursor_pos(2,1);
+        &lk204_text(substr($outputs[$outno].(' 'x20),0,20));
+
+      } elsif ($y==1) {
+        $channel++;
+        $channel=1 if $channel>16;
+        &lk204_set_cursor_pos(3,1);
+        &lk204_text("Chn $channel ");
+
+      } else {
+        $program+=($x10?10:1);
+        $program=0 if $program>127;
+        &lk204_set_cursor_pos(3,7);
+        &lk204_text(substr((' 'x14).$program_sets[int($program/8)],-14));
+        &lk204_set_cursor_pos(4,1);
+        &lk204_text(substr($program_names[$program].(' 'x20),0,20));
+      }
+    }
+
+    if ($_ eq 'D') { # left
+      if ($y==0) {
+        $outno--;
+        $outno=$#outputs if $outno<0;
+        &lk204_set_cursor_pos(2,1);
+        &lk204_text(substr($outputs[$outno].(' 'x20),0,20));
+
+      } elsif ($y==1) {
+        $channel--;
+        $channel=16 if $channel<1;
+        &lk204_set_cursor_pos(3,1);
+        &lk204_text("Chn $channel ");
+      
+      } else {
+        $program-=($x10?10:1);
+        $program=127 if $program<0;
+        &lk204_set_cursor_pos(3,7);
+        &lk204_text(substr((' 'x14).$program_sets[int($program/8)],-14));
+        &lk204_set_cursor_pos(4,1);
+        &lk204_text(substr($program_names[$program].(' 'x20),0,20));
+      }
+    }
+    
+    if ($_ eq 'A') { # up-left: exit
+      return;
+    }
+
+    if ($_ eq 'G') { # down-left: toggle x10
+      if ($x10) {
+        $x10=0;
+        &lk204_set_cursor_pos(1,15);
+        &lk204_text(' 'x5);
+      } else {
+        $x10=1;
+        &lk204_set_cursor_pos(1,15);
+        &lk204_text('{x10}');
+      }
+    }
+    
+    if ($_ eq 'B') { # up
+      $y--;
+      $y=2 if $y<0;
+    }
+
+    if ($_ eq 'H') { # down
+      $y++;
+      $y=0 if $y>2;
+    }
+    
+    if ($_ eq 'E') { # centre: send command
+      $message=pack('A4NnnnA4NCCCCCCC',
+        'MThd',6,1,1,0x1E0,
+        'MTrk',7,
+          0,0xBF+$channel,$program,
+          0,0xFF,0x2F,0);
+      open(APLAY,'|aplaymidi -p '.$output_numbers[$outno].':0 -');
+      print APLAY $message;
+      close(APLAY);
+    }
+  }
+}
+
+########################################################################
 
 sub midi_tune {
   @note_cycle=qw/C C# D D# E F F# G G# A A# B/;
@@ -296,7 +640,17 @@ sub midi_tune {
       $note[$channel]=0 if $note[$channel]<0;
     }
     
-    if (($_ eq 'C') || ($_ eq 'D')) {
+    if ($_ eq 'A') { # up-left
+      $note[$channel]+=12;
+      $note[$channel]=127 if $note[$channel]>127;
+    }
+
+    if ($_ eq 'G') { # down-left
+      $note[$channel]-=12;
+      $note[$channel]=0 if $note[$channel]<0;
+    }
+    
+    if (/[ACDG]/) {
       &lk204_text(sprintf('%d %3d %-4s%8.2fHz',
         $channel,$note[$channel],
         $note_cycle[$note[$channel]%12].(int($note[$channel]/12)-1),
@@ -315,7 +669,7 @@ sub midi_tune {
       $channel=3-$channel;
     }
     
-    if (($_ eq 'A') || ($_ eq 'E')) { # exit
+    if ($_ eq 'E') { # exit
       return;
     }
   }
