@@ -101,7 +101,7 @@ sub midi_menu {
     &lk204_clear_screen;
     &lk204_text("MIDI menu");
 
-    $_=&lk204_grid_submenu(2,'conn','disco','progch','tune');
+    $_=&lk204_grid_submenu(2,'conn','disco','progch','tune','xlat');
     if ($_ eq 'conn') {
       &midi_conn;
     } elsif ($_ eq 'disco') {
@@ -110,6 +110,8 @@ sub midi_menu {
       &midi_progch;
     } elsif ($_ eq 'tune') {
       &midi_tune;
+    } elsif ($_ eq 'xlat') {
+      system './midi/threev';
     } elsif ($_ eq '[ESC]') {
       return;
     }

@@ -21,6 +21,8 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <sys/time.h>
+#include <sys/types.h>
 #include <sys/utsname.h>
 #include <termios.h>
 #include <unistd.h>
@@ -109,6 +111,7 @@ void lk204_printf(const char *format,...) {
    buf[i-j]=0;
    
    fputs(buf,lk204_out_fp);
+   fflush(lk204_out_fp);
 }
 
 /**********************************************************************/
@@ -133,7 +136,7 @@ void lk204_set_cursor_pos(int r,int c) {
    if (r>4) r=4;
    if (c<1) c=1;
    if (c>20) c=20;
-   
+
    if (test_mode)
      fprintf(lk204_out_fp,"\e[%d;%dH",9+r,9+c);
    else
@@ -152,233 +155,212 @@ void lk204_go_home(void) {
 /**********************************************************************/
 
 char lk204_get_key(void) {
-/*
-  $tilde='~';
-  while (1) {
-    if ($tilde ne '~') {
-      $_=$tilde;
-      $tilde='~';
-    } else {
-      read($lk204_in_fh,$_,1);
-    }
-    return $_ if /^[A-EGH]$/;
-    return 'E' if ($_ eq "\n") && $lk204_is_ansi;
-    return 'E' if ($_ eq "\r") && $lk204_is_ansi;
-    next unless $lk204_is_ansi && ($_ eq "\e");
-    read($lk204_in_fh,$_,1);
-    next unless $_ eq '[';
-    read($lk204_in_fh,$_,1);
-    return 'B' if $_ eq 'A';
-    return 'C' if $_ eq 'C';
-    return 'D' if $_ eq 'D';
-    return 'E' if $_ eq 'E';
-    return 'H' if $_ eq 'B';
-    read($lk204_in_fh,$tilde,1);
-    next unless $tilde eq '~';
-    return 'A' if $_ eq '1';
-    return 'G' if $_ eq '4';
-  }
-*/
+   char tilde='~',du;
+   
+   while (1) {
+      if (tilde!='~') {
+	 du=tilde;
+	 tilde='~';
+      } else
+	fread(&du,1,1,lk204_in_fp);
+     
+      if ((du>='A') && (du<='E')) return du;
+      if ((du=='G') || (du=='H')) return du;
+      if (test_mode && ((du=='\n') || (du=='\r'))) return 'E';
+      if ((!test_mode) || (du!='\e')) continue;
+      
+      fread(&du,1,1,lk204_in_fp);
+      if (du!='[') continue;
+      
+      fread(&du,1,1,lk204_in_fp);
+
+      if (du=='A') return 'B';
+      if (du=='C') return 'C';
+      if (du=='D') return 'D';
+      if (du=='E') return 'E';
+      if (du=='B') return 'H';
+      
+      fread(&tilde,1,1,lk204_in_fp);
+      if (tilde!='~') continue;
+
+      if (du=='1') return 'A';
+      if (du=='4') return 'G';
+   }
 }
 
 /**********************************************************************/
 
 void lk204_led_red(int ledno) {
-/*
-  my($ledno)=@_;
+   if (ledno<1) ledno=1;
+   if (ledno>3) ledno=3;
 
-  $ledno=1 if $ledno<1;
-  $ledno=3 if $ledno>3;
-
-  if ($lk204_is_ansi) {
-    printf $lk204_out_fh "\e[%d;3H\e[1;31mRED\e[0m",7+2*$ledno;
-  } else {
-    printf $lk204_out_fh "\xFE\x57%c\xFE\x56%c",2*$ledno-1,2*$ledno;
-  }
-  flush $lk204_out_fh;
-*/
+   if (test_mode)
+     fprintf(lk204_out_fp,"\e[%d;3H\e[1;31mRED\e[0m",7+2*ledno);
+   else
+     fprintf(lk204_out_fp,"\xFE\x57%c\xFE\x56%c",2*ledno-1,2*ledno);
+   fflush(lk204_out_fp);
 }
 
 void lk204_led_yellow(int ledno) {
-/*
-  my($ledno)=@_;
+   if (ledno<1) ledno=1;
+   if (ledno>3) ledno=3;
 
-  $ledno=1 if $ledno<1;
-  $ledno=3 if $ledno>3;
-
-  if ($lk204_is_ansi) {
-    printf $lk204_out_fh "\e[%d;3H\e[1;33mYEL\e[0m",7+2*$ledno;
-  } else {
-    printf $lk204_out_fh "\xFE\x56%c\xFE\x56%c",2*$ledno-1,2*$ledno;
-  }
-  flush $lk204_out_fh;
-*/
+   if (test_mode)
+     fprintf(lk204_out_fp,"\e[%d;3H\e[1;33mYEL\e[0m",7+2*ledno);
+   else
+     fprintf(lk204_out_fp,"\xFE\x56%c\xFE\x56%c",2*ledno-1,2*ledno);
+   fflush(lk204_out_fp);
 }
 
 void lk204_led_green(int ledno) {
-/*
-  my($ledno)=@_;
+   if (ledno<1) ledno=1;
+   if (ledno>3) ledno=3;
 
-  $ledno=1 if $ledno<1;
-  $ledno=3 if $ledno>3;
-
-  if ($lk204_is_ansi) {
-    printf $lk204_out_fh "\e[%d;3H\e[1;32mGRN\e[0m",7+2*$ledno;
-  } else {
-    printf $lk204_out_fh "\xFE\x56%c\xFE\x57%c",2*$ledno-1,2*$ledno;
-  }
-  flush $lk204_out_fh;
-*/
+   if (test_mode)
+     fprintf(lk204_out_fp,"\e[%d;3H\e[1;32mGRN\e[0m",7+2*ledno);
+   else
+     fprintf(lk204_out_fp,"\xFE\x56%c\xFE\x57%c",2*ledno-1,2*ledno);
+   fflush(lk204_out_fp);
 }
 
 void lk204_led_off(int ledno) {
-/*
-  my($ledno)=@_;
+   if (ledno<1) ledno=1;
+   if (ledno>3) ledno=3;
 
-  $ledno=1 if $ledno<1;
-  $ledno=3 if $ledno>3;
-
-  if ($lk204_is_ansi) {
-    printf $lk204_out_fh "\e[%d;3H\e[0mOFF",7+2*$ledno;
-  } else {
-    printf $lk204_out_fh "\xFE\x57%c\xFE\x57%c",2*$ledno-1,2*$ledno;
-  }
-  flush $lk204_out_fh;
-*/
+   if (test_mode)
+     fprintf(lk204_out_fp,"\e[%d;3H\e[0mOFF",7+2*ledno);
+   else
+     fprintf(lk204_out_fp,"\xFE\x57%c\xFE\x57%c",2*ledno-1,2*ledno);
+   fflush(lk204_out_fp);
 }
 
 /**********************************************************************/
 
 int lk204_horiz_menu(int lineno,int num_entries,const char **entries) {
-/*
-  my($lineno)=shift;
-  my(@col,$xcol);
-
-  for ($i=0,$xcol=1;$i<$#_;$i++) {
-    $col[$i]=$xcol;
-    $xcol+=(length($_[$i])+1);
-  }
-  push @col,21-length($_[$#_]);
-  
-  &lk204_set_cursor_pos($lineno,1);
-  for ($i=0,$xcol=1;$i<=$#_;$i++) {
-    &lk204_text((' 'x($col[$i]-$xcol)).$_[$i]);
-    $xcol=$col[$i]+length($_[$i]);
-  }
-
-  $i=0;
-  while (1) {
-    &lk204_set_cursor_pos($lineno,$col[$i]);
-    $_=&lk204_get_key;
-    if ($_ eq 'E') {
-      return $_[$i];
-    }
-    if (($_ eq 'B') || ($_ eq 'D')) {
-      $i--;
-      $i=$#_ if $i<0;
-    }
-    if (($_ eq 'C') || ($_ eq 'H')) {
-      $i++;
-      $i=0 if $i>$#_;
-    }
-  }
-*/
+   int col[80];
+   int i,xcol;
+   char du;
+   
+   if (num_entries>80) num_entries=80;
+   
+   for (i=0,xcol=1;i<num_entries-1;i++) {
+      col[i]=xcol;
+      xcol+=(strlen(entries[i])+1);
+   }
+   col[i]=21-strlen(entries[num_entries-1]);
+   
+   lk204_set_cursor_pos(lineno,1);
+   
+   for (i=0,xcol=1;i<num_entries;i++) {
+      lk204_printf("%*s",col[i]-xcol+strlen(entries[i]),entries[i]);
+      xcol=col[i]+strlen(entries[i]);
+   }
+   
+   i=0;
+   while (1) {
+      lk204_set_cursor_pos(lineno,col[i]);
+      du=lk204_get_key();
+      if (du=='E') return i;
+      if ((du=='B') || (du=='D')) {
+	 i--;
+	 if (i<0) i=num_entries-1;
+      }
+      if ((du=='C') || (du=='H')) {
+	 i++;
+	 if (i>=num_entries) i=0;
+      }
+   }
 }
 
 int lk204_horiz_submenu(int lineno,int num_entries,const char **entries) {
-/*
-  my($lineno)=shift;
-  my(@col,$xcol);
-
-  for ($i=0,$xcol=1;$i<$#_;$i++) {
-    $col[$i]=$xcol;
-    $xcol+=(length($_[$i])+1);
-  }
-  push @col,21-length($_[$#_]);
-  
-  &lk204_set_cursor_pos($lineno,1);
-  for ($i=0,$xcol=1;$i<=$#_;$i++) {
-    &lk204_text((' 'x($col[$i]-$xcol)).$_[$i]);
-    $xcol=$col[$i]+length($_[$i]);
-  }
-  
-  $i=0;
-  while (1) {
-    &lk204_set_cursor_pos($lineno,$col[$i]);
-    $_=&lk204_get_key;
-    if ($_ eq 'E') {
-      return $_[$i];
-    }
-    if ($_ eq 'A') {
-      return '[ESC]';
-    }
-    if (($_ eq 'B') || ($_ eq 'D')) {
-      $i--;
-      $i=$#_ if $i<0;
-    }
-    if (($_ eq 'C') || ($_ eq 'H')) {
-      $i++;
-      $i=0 if $i>$#_;
-    }
-  }
-*/
+   int col[80];
+   int i,xcol;
+   char du;
+   
+   if (num_entries>80) num_entries=80;
+   
+   for (i=0,xcol=1;i<num_entries-1;i++) {
+      col[i]=xcol;
+      xcol+=(strlen(entries[i])+1);
+   }
+   col[i]=21-strlen(entries[num_entries-1]);
+   
+   lk204_set_cursor_pos(lineno,1);
+   
+   for (i=0,xcol=1;i<num_entries;i++) {
+      lk204_printf("%*s",col[i]-xcol+strlen(entries[i]),entries[i]);
+      xcol=col[i]+strlen(entries[i]);
+   }
+   
+   i=0;
+   while (1) {
+      lk204_set_cursor_pos(lineno,col[i]);
+      du=lk204_get_key();
+      if (du=='E') return i;
+      if (du=='A') return -1;
+      if ((du=='B') || (du=='D')) {
+	 i--;
+	 if (i<0) i=num_entries-1;
+      }
+      if ((du=='C') || (du=='H')) {
+	 i++;
+	 if (i>=num_entries) i=0;
+      }
+   }
 }
 
 int lk204_vert_menu(const char *prompt,int num_entries,const char **entries) {
-/*
-  my($prompt)=shift;
-  my($scroll)=-1;
-  
-  &lk204_clear_screen;
-  &lk204_text($prompt);
-  for ($i=0;$i<=$#_;$i++) {
-    &lk204_set_cursor_pos($i+2,1);
-    &lk204_text($_[$i]);
-    last if $i>=2;
-  }
-  
-  $i=0;
-  while (1) {
-    &lk204_set_cursor_pos($i-$scroll+1,1);
-    $_=&lk204_get_key;
+   int scroll=-1;
+   int i,j;
+   char du;
+   
+   lk204_clear_screen();
+   lk204_printf("%s",prompt);
 
-    if ($_ eq 'E') {
-      return $_[$i];
-    }
-    if ($_ eq 'A') {
-      return '[ESC]';
-    }
+   for (i=0;i<num_entries;i++) {
+      lk204_set_cursor_pos(i+2,1);
+      lk204_printf("%s",entries[i]);
+      if (i>=2) break;
+   }
 
-    if (($_ eq 'B') || ($_ eq 'D')) {
-      $i--;
-      $i=$#_ if $i<0;
-    }
-    if (($_ eq 'C') || ($_ eq 'H')) {
-      $i++;
-      $i=0 if $i>$#_;
-    }
+   i=0;
+   while (1) {
+      lk204_set_cursor_pos(i-scroll+1,1);
+      du=lk204_get_key();
 
-    if ($i-$scroll<0) {
-      $scroll=$i;
-      &lk204_clear_screen;
-      for ($j=$scroll;$j<=$#_;$j++) {
-        &lk204_set_cursor_pos($j-$scroll+1,1);
-        &lk204_text($_[$j]);
-        last if $j-$scroll>=3;
+      if (du=='E') return i;
+      if (du=='A') return -1;
+      if ((du=='B') || (du=='D')) {
+	 i--;
+	 if (i<0) i=num_entries-1;
       }
-    }
-
-    if ($i-$scroll>3) {
-      $scroll=$i-3;
-      &lk204_clear_screen;
-      for ($j=$scroll;$j<=$#_;$j++) {
-        &lk204_set_cursor_pos($j-$scroll+1,1);
-        &lk204_text($_[$j]);
-        last if $j-$scroll>=3;
+      if ((du=='C') || (du=='H')) {
+	 i++;
+	 if (i>=num_entries) i=0;
       }
-    }
-  }
-*/
+      
+      if (i-scroll<0) {
+	 scroll=i;
+	 lk204_clear_screen();
+	 for (j=scroll;j<num_entries;j++) {
+	    lk204_set_cursor_pos(j-scroll+1,1);
+	    lk204_printf("%s",entries[j]);
+	    if (j-scroll>=3)
+	      break;
+	 }
+      }
+
+      if (i-scroll>3) {
+	 scroll=i-3;
+	 lk204_clear_screen();
+	 for (j=scroll;j<num_entries;j++) {
+	    lk204_set_cursor_pos(j-scroll+1,1);
+	    lk204_printf("%s",entries[j]);
+	    if (j-scroll>=3)
+	      break;
+	 }
+      }
+   }
 }
 
 int lk204_grid_submenu(int lineno,int num_entries,const char **entries) {
@@ -470,4 +452,21 @@ int lk204_grid_submenu(int lineno,int num_entries,const char **entries) {
     }
   }
 */
+}
+
+/**********************************************************************/
+
+int lk204_wait_for_key(int timeout) {
+   struct timeval tv;
+   fd_set fdset;
+   int desc;
+   
+   tv.tv_sec=0;
+   tv.tv_usec=timeout;
+   FD_ZERO(&fdset);
+   desc=fileno(lk204_in_fp);
+   FD_SET(desc,&fdset);
+   select(desc+1,&fdset,NULL,NULL,&tv);
+   
+   return FD_ISSET(desc,&fdset);
 }

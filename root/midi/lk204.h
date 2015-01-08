@@ -45,4 +45,6 @@ int lk204_horiz_submenu(int lineno,int num_entries,const char **entries);
 int lk204_vert_menu(const char *prompt,int num_entries,const char **entries);
 int lk204_grid_submenu(int lineno,int num_entries,const char **entries);
 
+int lk204_wait_for_key(int timeout);
+
 #endif /* ndef LK204_H */
