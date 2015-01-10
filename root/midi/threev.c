@@ -51,6 +51,8 @@ VOICE_INFO voices[4]={
 
 int voice_sequence=0;
 
+char *note_names[12]={"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
+
 void note_on(int chan,int note,int vel) {
    int i,voice=-1;
    char out_buf[3];
@@ -89,6 +91,10 @@ void note_on(int chan,int note,int vel) {
    out_buf[2]=vel;
    snd_rawmidi_write(voices[voice].midi_output,out_buf,3);
    
+   /* show the note on the LCD */
+   lk204_set_cursor_pos(voice+1,1);
+   lk204_printf("%2s%-2d ",note_names[note%12],(note/12)-1);
+   
    /* record it */
    voices[voice].note=note;
    voices[voice].busy=1;
@@ -114,6 +120,8 @@ void note_off(int chan,int note,int vel) {
 	voices[i].busy=0;
 	if (i<3)
 	  lk204_led_green(i+1);
+	lk204_set_cursor_pos(i+1,1);
+	lk204_printf(" --  ");
      }
 }
 
@@ -213,14 +221,15 @@ int main(int argc,char **argv) {
    lk204_led_green(2);
    lk204_led_green(3);
    lk204_go_home();
-   lk204_set_cursor_pos(1,1);
-   lk204_printf("--   %s  1",dev_names[0]);
-   lk204_set_cursor_pos(2,1);
-   lk204_printf("--   %s  2",dev_names[0]);
-   lk204_set_cursor_pos(3,1);
-   lk204_printf("--   %s  3",dev_names[0]);
-   lk204_set_cursor_pos(4,1);
-   lk204_printf("--   ------------  -");
+   for (i=0;i<4;i++) {
+      lk204_set_cursor_pos(i+1,1);
+      if (voices[i].target_dev>=0)
+	lk204_printf(" --  %s %2d",
+		     dev_names[voices[i].target_dev],
+		     voices[i].target_channel);
+      else
+	lk204_printf(" --  ------------  -");
+   }
    lk204_set_cursor_pos(1,6);
    
    curs_row=1;
@@ -369,6 +378,7 @@ int main(int argc,char **argv) {
 	     if ((midi_in_buf[j]&0x80)==0) {
 		midi_in_vel=midi_in_buf[j];
 		note_off(midi_in_channel,midi_in_note,midi_in_vel);
+		lk204_set_cursor_pos(curs_row,curs_col);
 		midi_in_state=1;
 	     } else {
 		midi_in_state=0;
@@ -395,6 +405,7 @@ int main(int argc,char **argv) {
 		  note_off(midi_in_channel,midi_in_note,0x40);
 		else
 		  note_on(midi_in_channel,midi_in_note,midi_in_vel);
+		lk204_set_cursor_pos(curs_row,curs_col);
 		midi_in_state=3;
 	     } else {
 		midi_in_state=0;
@@ -416,7 +427,7 @@ int main(int argc,char **argv) {
 	  }
 	}
    }
-   
+
    /* close MIDI */
    snd_rawmidi_close(midi_input);
    for (i=0;i<4;i++)
