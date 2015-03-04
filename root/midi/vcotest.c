@@ -44,22 +44,28 @@ int main(int argc,char **argv) {
       
       printf("%d\t",note);
 
+      usleep(100000);
+
       out_buf[0]=0x90;
       out_buf[1]=note;
       out_buf[2]=100;
       snd_rawmidi_write(midi_out,out_buf,3);
       
-      usleep(250000);
-      
+      usleep(100000);
+
       out_buf[0]=0x90;
       out_buf[1]=note;
       out_buf[2]=0;
       snd_rawmidi_write(midi_out,out_buf,3);
       
-      system("arecord -c1 -r192000 /tmp/test.wav -d1 2> /dev/null");
+      usleep(100000);
+
+      system("arecord -c1 -r192000 /tmp/test.wav -d3 2> /dev/null");
       
+      usleep(100000);
+
       wav_file=fopen("/tmp/test.wav","r");
-      fread(wav_data,1,192044,wav_file);
+      fread(wav_data,1,384044,wav_file);
       fclose(wav_file);
       
       state=0;
@@ -67,7 +73,7 @@ int main(int argc,char **argv) {
       last_fall=0;
       num_falls=0;
       
-      for (i=44;i<192044;i++) {
+      for (i=44;i<384044;i++) {
 	 if ((state!=1) && (wav_data[i]<0x7F)) {
 	    if (state==2) {
 	       if (num_falls==0)
@@ -80,8 +86,8 @@ int main(int argc,char **argv) {
 	      state=2;
       }
       
-      if ((num_falls>2) && (num_falls<30000)) {
-	 freq=((double)(num_falls-1))*192000.0/((double)(last_fall-first_fall));
+      if ((num_falls>2) && (num_falls<60000)) {
+	 freq=((double)(num_falls-1))*384000.0/((double)(last_fall-first_fall));
 	 octaves=log(freq/440.0)/log(2.0);
 /*	 printf("%d\t%d\n",last_fall-first_fall,num_falls); */
 	 printf("%f\t%f\n",freq,octaves);
